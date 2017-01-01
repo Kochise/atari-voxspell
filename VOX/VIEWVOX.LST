@@ -1,0 +1,152 @@
+' *******************************************************
+' Impression et visualisation de la table de transcription phon‚tique.
+' *******************************************************
+ON ERROR GOSUB end
+ON BREAK GOSUB end
+'
+fname$="E:\ASSEMBLE\VOX\PHON_TBL.DAT"
+OPEN "i",#1,fname$
+lenght%=LOF(#1)
+buffer%=MALLOC(lenght%)
+BGET #1,buffer%,lenght%
+CLOSE #1
+'
+OPEN "i",#1,"LST:"
+max_len&=0
+addr%=buffer%
+REPEAT
+  FOR j&=0 TO 28
+    a$=""
+    b$=""
+    c$=""
+    d$=""
+    ' Texte.
+    IF BYTE{addr%}=0
+      @end
+    ENDIF
+    REPEAT
+      b|=BYTE{addr%}
+      IF b|=0
+        a$="Error"
+        EXIT IF TRUE
+      ENDIF
+      INC addr%
+      IF (b| AND &H7F)>31
+        a$=a$+CHR$(b| AND &H7F)
+      ELSE
+        a$="!Error!"
+        EXIT IF TRUE
+      ENDIF
+    UNTIL BTST(b|,7)=TRUE
+    '
+    ' Donn‚es du pr‚fixe.
+    REPEAT
+      b|=BYTE{addr%}
+      IF b|=0
+        b$="Error"
+        EXIT IF TRUE
+      ENDIF
+      '
+      SELECT b| AND &H7F
+      CASE 0
+        z$="0"
+      CASE 1
+        z$="1"
+      CASE 2
+        z$="2"
+      CASE 3
+        z$="3"
+      CASE 4
+        z$="4"
+      CASE 5
+        z$="5"
+      CASE 6
+        z$="6"
+      CASE 7
+        z$="7"
+      CASE 8
+        z$="8"
+      CASE 9
+        z$="9"
+      DEFAULT
+        z$=CHR$(b| AND &H7F)
+      ENDSELECT
+      '
+      b$=b$+z$
+      INC addr%
+    UNTIL BTST(b|,7)=TRUE
+    '
+    ' Donn‚es du suffixe.
+    i&=0
+    REPEAT
+      b|=BYTE{addr%}
+      IF b|=0
+        c$="!Error!"
+        EXIT IF TRUE
+      ENDIF
+      '
+      SELECT b| AND &H7F
+      CASE 0
+        z$="0"
+      CASE 1
+        z$="1"
+      CASE 2
+        z$="2"
+      CASE 3
+        z$="3"
+      CASE 4
+        z$="4"
+      CASE 5
+        z$="5"
+      CASE 6
+        z$="6"
+      CASE 7
+        z$="7"
+      CASE 8
+        z$="8"
+      CASE 9
+        z$="9"
+      DEFAULT
+        z$=CHR$(b| AND &H7F)
+      ENDSELECT
+      '
+      c$=c$+z$
+      INC addr%
+    UNTIL BTST(b|,7)=TRUE
+    '
+    ' PhonŠmes.
+    REPEAT
+      b|=BYTE{addr%}
+      EXIT IF b|=0
+      IF b| AND &H7F>31
+        d$=d$+CHR$(b| AND &H7F)
+      ELSE
+        d$="!Error!"
+        EXIT IF TRUE
+      ENDIF
+      INC addr%
+    UNTIL FALSE
+    '
+    INC addr%
+    ln$=a$+SPACE$(10-LEN(a$))+"|"
+    ln$=ln$+b$+SPACE$(10-LEN(b$))+"|"
+    ln$=ln$+c$+SPACE$(10-LEN(c$))+"|"
+    ln$=ln$+d$
+    IF LEN(ln$)>max_len&
+      max_len&=LEN(ln$)
+    ENDIF
+    PRINT ln$
+    PRINT #1,ln$
+  NEXT j&
+  '  ~INP(2)
+UNTIL FALSE
+'
+@end
+'
+> PROCEDURE end
+  PRINT max_len&
+  ~INP(2)
+  CLOSE #1
+  ~MFREE(buffer%)
+  EDIT
+RETURN

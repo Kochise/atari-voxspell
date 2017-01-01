@@ -1,0 +1,687 @@
+' ON ERROR GOSUB end
+ON BREAK GOSUB end
+RESERVE 100000
+$C+ ! Option indispensable pour ‚viter les plantages.
+'
+@init_all
+'
+DO
+  @keyboard
+LOOP
+'
+'
+' *************************************************************
+'
+' *************************************************************
+PROCEDURE speak
+  LOCAL a$,dat_buf%,dat_lgt%,snd_buf%,snd_lgt%,fg!
+  '
+  @show_info("Calcul en cours...")
+  CARD{vox_pb%+pb_freq&}=freq%
+  CARD{vox_pb%+pb_voice_freq&}=voice_freq%
+  CARD{vox_pb%+pb_rate&}=rate%
+  CARD{vox_pb%+pb_tone&}=tone%
+  '
+  ~MFREE(spl_buf%)
+  spl_fg!=FALSE
+  fg!=FALSE
+  '
+  IF txt_converted!=FALSE
+    a$=" "+sentence$+CHR$(0)
+    LONG{vox_pb%+pb_txt_addr&}=VARPTR(a$) ! Adresse du texte.
+    IF phoneme_txt_buf%<>0
+      ~MFREE(phoneme_txt_buf%)
+      phoneme_txt_buf%=0
+    ENDIF
+    phoneme_txt_buf%=MALLOC(4*LEN(a$)+256)
+    LONG{vox_pb%+pb_phoneme_txt_addr&}=phoneme_txt_buf% ! Adresse du texte des phonŠmes.
+    IF @call_vox(0)<>0 ! Conversion du texte en phonŠmes.
+      fg!=TRUE
+    ENDIF
+    phoneme_txt$=CHAR{phoneme_txt_buf%}
+    txt_converted!=TRUE
+  ENDIF
+  '
+  IF fg!=FALSE AND LEN(phoneme_txt$)>0
+    dat_lgt%=LEN(phoneme_txt$)*32
+    dat_buf%=MALLOC(dat_lgt%)
+    LONG{vox_pb%+pb_phoneme_dat_addr&}=dat_buf% ! Adresse des donn‚es des phonŠmes.
+    LONG{vox_pb%+pb_dat_size&}=dat_lgt% ! Longueur des donn‚es des phonŠmes.
+    IF @call_vox(1)=0 ! Ecriture des donn‚es des phonŠmes.
+      '
+      snd_lgt%=LONG{vox_inf%+inf_snd_lgt&}
+      snd_buf%=MALLOC(snd_lgt%)
+      LONG{vox_pb%+pb_snd_addr&}=snd_buf%
+      IF @call_vox(2)=0 ! Ecriture des sons.
+        '
+        spl_lgt%=LONG{vox_inf%+inf_spl_lgt&} ! Longueur du sample.
+        spl_buf%=MALLOC(4*spl_lgt%) ! R‚serve m‚moire.
+        LONG{vox_pb%+pb_spl_addr&}=spl_buf%
+        IF @call_vox(3)=0 ! SynthŠse de la voix.
+          spl_fg!=TRUE
+        ENDIF
+        '
+      ENDIF
+      ~MFREE(snd_buf%)
+    ENDIF
+    ~MFREE(dat_buf%)
+  ENDIF
+RETURN
+> FUNCTION call_vox(n&) ! Appel une routine de VOX.
+LOCAL verr%
+verr%=C:vox_call_addr%(W:n&,L:vox_pb%)
+SELECT verr%
+CASE 0
+  vox_err$="None."
+CASE 1
+  vox_err$="Unknown routine."
+CASE 2
+  vox_err$="Phoneme data buffer too small."
+CASE 3
+  vox_err$="Bad phoneme text."
+CASE 4
+  vox_err$="???."
+DEFAULT
+  vox_err$="Unknown error."
+ENDSELECT
+RETURN verr%
+ENDFUNC
+> PROCEDURE struct ! D‚finition des structures.
+' D‚finition de la structure du bloc de paramŠtres.
+pb_fgs&=0
+pb_txt_addr&=4
+pb_phoneme_txt_addr&=8
+pb_phoneme_dat_addr&=12
+pb_snd_addr&=16
+pb_spl_addr&=20
+pb_dat_size&=24
+pb_freq&=28
+pb_voice_freq&=30
+pb_rate&=32
+pb_tone&=34
+pb_sizeof&=36
+'
+'
+' D‚finition de la structure du bloc d'information.
+inf_version&=0
+inf_comp&=4
+inf_fgs&=8
+inf_call_addr&=12
+inf_dat_lgt&=16
+inf_snd_lgt&=20
+inf_spl_lgt&=24
+inf_dat_nb&=28
+inf_snd_nb&=30
+'
+inf_freq&=32
+inf_voice_freq&=34
+inf_rate&=36
+inf_tone&=38
+'
+'
+' Structure des fichiers de paramŠtres.
+file_size%=16
+RETURN
+'
+> PROCEDURE play
+IF spl_fg!
+  ~@setbuffer(0,spl_buf%,spl_buf%+4*spl_lgt%)
+  play_fg!=TRUE
+  IF repeat_fg!=TRUE
+    ~@buffoper(3)
+  ELSE
+    ~@buffoper(1)
+  ENDIF
+ENDIF
+RETURN
+> PROCEDURE stop
+play_fg!=FALSE
+~@buffoper(0)
+RETURN
+'
+> PROCEDURE keyboard
+LOCAL key$,fg!
+'
+key$=UPPER$(CHR$(INP(2)))
+SELECT key$
+  '
+  '
+  ' Touches pour les paramŠtres globaux.
+CASE " " ! Joue ou stop le sample.
+  IF repeat_fg!=TRUE
+    IF play_fg!=FALSE
+      @play
+    ELSE
+      @stop
+    ENDIF
+  ELSE
+    @stop
+    @play
+    play!=FALSE
+  ENDIF
+CASE "X" ! Entr‚e d'un texte et conversion en phonŠmes.
+  @show_info("")
+  FORM INPUT 255,sentence$
+  txt_converted!=FALSE
+  @speak
+CASE "P" ! Entr‚e de phonŠmes.
+  @show_info("")
+  FORM INPUT 255,phoneme_txt$
+  ~MFREE(phoneme_txt_buf%)
+  phoneme_txt_buf%=MALLOC(LEN(phoneme_txt$)+2)
+  CHAR{phoneme_txt_buf%}=phoneme_txt$
+  LONG{vox_pb%+pb_phoneme_txt_addr&}=phoneme_txt_buf% ! Adresse du texte des phonŠmes.
+  sentence$=""
+  txt_converted!=TRUE
+  @speak
+CASE "A"
+  @speak
+CASE "B"
+  IF repeat_fg!=TRUE
+    repeat_fg!=FALSE
+    play_fg!=FALSE
+  ELSE
+    repeat_fg!=TRUE
+    play_fg!=FALSE
+  ENDIF
+CASE "-" ! Augmente le volume.
+  INC vol&
+  IF vol&>15
+    vol&=15
+  ENDIF
+  ~@soundcmd(0,SHL&(vol&,4))
+  ~@soundcmd(1,SHL&(vol&,4))
+CASE "+" ! Diminue le volume.
+  DEC vol&
+  IF vol&<0
+    vol&=0
+  ENDIF
+  ~@soundcmd(0,SHL&(vol&,4))
+  ~@soundcmd(1,SHL&(vol&,4))
+CASE "*"
+  IF speaker_fg!=TRUE
+    speaker_fg!=FALSE
+  ELSE
+    speaker_fg!=TRUE
+  ENDIF
+  @set_speaker
+  '
+  '
+  ' Touches pour les paramŠtres de VOX.
+CASE "F"
+  IF freq%=12500
+    freq%=25000
+    voice_freq%=24000
+    rate%=300
+    tone%=200
+    ~@soundcmd(6,2)
+  ELSE IF freq%=50000
+    freq%=12500
+    voice_freq%=12000
+    rate%=150
+    tone%=100
+    ~@soundcmd(6,1)
+  ELSE
+    freq%=50000
+    voice_freq%=48000
+    rate%=450
+    tone%=400
+    ~@soundcmd(6,3)
+  ENDIF
+CASE "V"
+  voice_freq%=@enter("Voice frequence=")
+CASE "R"
+  rate%=@enter("Voice rate=")
+CASE "T"
+  tone%=@enter("Voice tone=")
+  '
+CASE "I"
+  '    tone_lgt%=@enter("Tone lenght=")
+CASE "J"
+  '    vglobal%=@enter("Global volume=")
+CASE "J"
+CASE "1"
+  '   fc1=@enter("Frequence coef 1=")
+CASE "2"
+  '    fc2=@enter("Frequence coef 2=")
+CASE "3"
+  '   fc3=@enter("Frequence coef 3=")
+CASE "4"
+  '   vc1=@enter("Volume coef 1=")
+CASE "5"
+  '  vc2=@enter("Volume coef 2=")
+CASE "6"
+  ' vc3=@enter("Volume coef 3=")
+  '
+  ' Touches diverses.
+CASE "L"
+  @load
+CASE "S"
+  @save
+CASE "O"
+  @save_spl
+CASE "Q"
+  @show_info("Are you sure? (Y/N)")
+  IF UPPER$(CHR$(INP(2)))="Y"
+    @end
+  ENDIF
+ENDSELECT
+@menu
+RETURN
+> PROCEDURE menu
+'
+PRINT CHR$(27)+"E"+CHR$(27)+"w"; ! D‚bordement de ligne automatique d‚sactiv‚.
+PRINT AT(1,max_ln&-24);STRING$(40,"*");
+PRINT AT(1,max_ln&-23);CHR$(27)+"p"+"               V   O   X                "+CHR$(27)+"q";
+PRINT AT(1,max_ln&-22);"   The Vocal Synthesizer by M.L. 1996   ";
+'
+PRINT AT(1,max_ln&-21);"-----------Global parameters------------";
+'  PRINT AT(1,max_ln&-20);"(Q)Quit   (L)Load  (S)Save  (O)Save spl ";
+PRINT AT(1,max_ln&-20);"(Q)Quit                   (O)Save spl   ";
+PRINT AT(1,max_ln&-19);"(X)Text      (P)Phoneme   (A)Recalc     ";
+IF repeat_fg!=TRUE
+  PRINT AT(1,max_ln&-18);"(SPACE)Play/Stop   (B)Repeat playback";
+ELSE
+  PRINT AT(1,max_ln&-18);"(SPACE)Play/Stop   (B)Play once";
+ENDIF
+IF speaker_fg!=TRUE
+  PRINT AT(1,max_ln&-17);"(+/-)Volume=";15-vol&;AT(20,max_ln&-17);"(*)Speaker on";
+ELSE
+  PRINT AT(1,max_ln&-17);"(+/-)Volume=";15-vol&;AT(20,max_ln&-17);"(*)Speaker off";
+ENDIF
+PRINT AT(1,max_ln&-14);"Sample lenght: ";spl_lgt%;" bytes, ";AT(29,max_ln&-14);STR$(spl_lgt%/freq%,10);" s";
+PRINT AT(1,max_ln&-13);sentence$;
+PRINT AT(1,max_ln&-12);phoneme_txt$;
+'
+PRINT AT(1,max_ln&-11);"-------------VOX parameters-------------";
+PRINT AT(1,max_ln&-10);"(F)Freq=";freq%;AT(20,max_ln&-10);"(V)Voice freq=";voice_freq%;
+PRINT AT(1,max_ln&-9);"(R)Rate=";rate%;AT(20,max_ln&-9);"(T)Tone=";tone%;
+'  PRINT AT(1,max_ln&-8);"(I)Tone lenght=";tone_lgt%;AT(20,max_ln&-8);"(J)Volume=";vglobal%;
+'  PRINT AT(1,max_ln&-7);"(1)F1=";fc1;AT(13,max_ln&-7);"(2)F2=";fc2;AT(26,max_ln&-7);"(3)F3=";fc3;
+'  PRINT AT(1,max_ln&-6);"(4)V1=";vc1;AT(13,max_ln&-6);"(5)V2=";vc2;AT(26,max_ln&-6);"(6)V3=";vc3;
+'  PRINT AT(1,max_ln&-5);
+PRINT AT(1,max_ln&-4);"Last error: ";vox_err$;
+PRINT AT(1,max_ln&-3);"Vox version ";vox_ver$;AT(20,max_ln&-3);"Vox comp ";vox_comp$;
+'
+PRINT AT(1,max_ln&-2);"--------------Command line--------------";
+@clear_info
+PRINT AT(1,max_ln&);STRING$(40,"*");
+RETURN
+> PROCEDURE clear_info
+PRINT AT(1,max_ln&-1);CHR$(27)+"l";">";
+RETURN
+> PROCEDURE show_info(a$)
+PRINT AT(1,max_ln&-1);CHR$(27)+"l>"+a$;
+RETURN
+> FUNCTION enter(a$)
+PRINT AT(1,max_ln&-1);CHR$(27)+"l>";a$;
+INPUT n
+RETURN n
+ENDFUNC
+'
+> PROCEDURE load ! Chargement d'une animation.
+LOCAL name$,lenght%,buffer%
+'
+@restore_scr
+SHOWM
+name$=@fileselect$("Choisir le fichier de paramŠtres",path$+mask$,default_name$)
+HIDEM
+@init_scr
+@menu
+'
+IF EXIST(name$)
+'
+@show_info("Chargement des paramŠtres en cours...")
+buffer%=MALLOC(file_size%)
+OPEN "i",#1,name$
+IF LOF(#1)=file_size%
+  '      BGET #1,buffer%,file_size% ! Charge les donn‚es.
+  '      default_name$=RIGHT$(name$,12)
+ELSE
+  @show_info("Fichier corrompu!!!")
+ENDIF
+CLOSE #1
+~MFREE(buffer%)
+'
+ENDIF
+'
+RETURN
+> PROCEDURE save ! Sauvegarde d'une animation.
+LOCAL name$,lenght%,buffer%
+'
+@restore_scr
+SHOWM
+name$=@fileselect$("Choisir le fichier de paramŠtres",path$+mask$,default_name$)
+HIDEM
+@init_scr
+@menu
+'
+IF name$<>""
+@show_info("Sauvegarde des paramŠtres en cours...")
+buffer%=MALLOC(file_size%)
+'    OPEN "o",#1,name$
+'    BPUT #1,buffer%,file_size%
+'    CLOSE #1
+~MFREE(buffer%)
+default_name$=RIGHT$(name$,12)
+ENDIF
+RETURN
+> PROCEDURE save_spl ! Sauvegarde du sample.
+LOCAL name$,lenght%
+'
+IF spl_fg!=TRUE
+@restore_scr
+SHOWM
+name$=@fileselect$("Choisir le fichier sample",path$+mask$,default_name$)
+HIDEM
+@init_scr
+@menu
+'
+IF name$<>""
+  @show_info("Sauvegarde du sample en cours...")
+  OPEN "O",#1,name$
+  BPUT #1,spl_buf%,spl_lgt%
+  CLOSE #1
+  default_name$=RIGHT$(name$,12)
+ENDIF
+ENDIF
+RETURN
+> FUNCTION fileselect$(a$,pfad$,file$)
+LOCAL f&,b&
+'
+~WIND_UPDATE(1)                           ! BEG_UPDATE
+'
+IF INT{ADD({ADD(GB,4)},0)}<&H140          ! Altes GEM/TOS...
+f&=FSEL_INPUT(pfad$,file$,b&)
+'
+ELSE                                      ! Sonst mit Titelzeile...
+f&=@fsel_exinput(a$,pfad$,file$,b&)
+ENDIF
+'
+~WIND_UPDATE(0)                           ! END_UPDATE
+'
+IF f&=0 OR b&=0                           ! Abbruch oder Error...
+RETURN ""
+ENDIF
+'
+RETURN LEFT$(pfad$,RINSTR(pfad$,"\"))+file$
+ENDFUNC
+> FUNCTION fsel_exinput(a$,VAR pfad$,file$,b&)
+$F%
+'
+a$=a$+CHR$(0)         ! Titel
+pfad$=pfad$+CHR$(0)+SPACE$(400)
+file$=file$+CHR$(0)+SPACE$(150)
+'
+GCONTRL(0)=91
+GCONTRL(1)=0
+GCONTRL(2)=2
+GCONTRL(3)=3
+GCONTRL(4)=0
+'
+ADDRIN(0)=V:pfad$     ! Pfad
+ADDRIN(1)=V:file$     ! Datei
+ADDRIN(2)=V:a$        ! Titel
+'
+GEMSYS
+'
+pfad$=CHAR{V:pfad$}   ! Pfad
+file$=CHAR{V:file$}   ! Dateiname
+'
+b&=GINTOUT(1)         ! Abbruch=0, OK=1
+'
+RETURN GINTOUT(0)     ! Fehlercode
+ENDFUNC
+'
+> PROCEDURE save_scr
+IF use_screen!=TRUE
+sav_physic_scr%=XBIOS(2)
+sav_logic_scr%=XBIOS(3)
+sav_scr_mode%=XBIOS(88,-1) ! On sauve l'ancien mode
+ENDIF
+RETURN
+> PROCEDURE init_scr
+LOCAL bps&,col80!,vga!,pal!,overscan!,stmodes!,vertflag!
+'
+IF use_screen!=TRUE
+' Recherche de la r‚solution donn‚e par scr_mode&.
+bps&=2^(scr_mode& AND &H7) ! Nombre de bits par pixel.
+col80!=BTST(scr_mode&,3)
+vga!=BTST(scr_mode&,4)
+pal!=BTST(scr_mode&,5)
+overscan!=BTST(scr_mode&,6)
+stmodes!=BTST(scr_mode&,7)
+vertflag!=BTST(scr_mode&,8)
+monitor&=XBIOS(89) ! VgetMonitor().
+'
+normal_xrez&=320
+'
+IF col80!=TRUE
+normal_xrez&=640 ! 80 columns.
+ENDIF
+'
+IF vga!=TRUE
+' Mode VGA.
+IF stmodes!=TRUE OR overscan!=TRUE OR monitor&<>2
+ERROR 7
+ENDIF
+IF vertflag!=TRUE
+normal_yrez&=240 ! Line doubling.
+ELSE
+normal_yrez&=480
+ENDIF
+ELSE
+' Mode t‚l‚vision/moniteur.
+IF vertflag!=TRUE
+normal_yrez&=200
+ELSE
+normal_yrez&=400
+ENDIF
+'
+' Modes compatibles.
+IF stmodes!=TRUE
+SELECT scr_mode& AND &X111011111
+CASE &X110001000 ! ST high (monochrome).
+CASE &X10001001 ! ST medium.
+CASE &X10000010 ! ST low.
+DEFAULT
+  ERROR 7
+ENDSELECT
+ELSE
+IF overscan!=TRUE ! Mode overscan.
+  MUL normal_xrez&,1.2
+  MUL normal_yrez&,1.2
+ENDIF
+ENDIF
+'
+ENDIF
+'
+xrez&=normal_xrez&
+yrez&=normal_yrez&
+'
+ln_size%=xrez&*bps&/8 ! Taille d'une ligne en octets.
+scr_size%=ln_size%*yrez& ! Taille d'un ‚cran en octets.
+screens%=MALLOC(scr_size%*2) ! R‚serve m‚moire pour 2 ‚crans.
+physic_scr%=screens%
+'  logic_scr%=screens%+scr_size%
+logic_scr%=screens%
+~XBIOS(5,L:logic_scr%,L:physic_scr%,3,scr_mode&)
+SPOKE &HFF8201,SHR(physic_scr%,16) AND &HFF
+SPOKE &HFF8203,SHR(physic_scr%,8) AND &HFF
+SPOKE &HFF820D,physic_scr% AND &HFF
+SLPOKE &HFF9800,0 ! Borders noirs.
+ENDIF
+RETURN
+> PROCEDURE restore_scr
+IF use_screen!=TRUE
+~XBIOS(5,L:sav_logic_scr%,L:sav_physic_scr%,3,sav_scr_mode%)
+SPOKE &HFF8201,SHR(sav_physic_scr%,16) AND &HFF
+SPOKE &HFF8203,SHR(sav_physic_scr%,8) AND &HFF
+SPOKE &HFF820D,sav_physic_scr% AND &HFF
+~MFREE(screens%)
+ENDIF
+RETURN
+'
+> PROCEDURE init_all
+OPTION BASE 0
+MAT BASE 0
+use_screen!=FALSE
+'
+'
+@struct
+'
+' Recherche du cookie de VOX.
+vox_inf%=@get_cookie("VOX ")
+IF vox_inf%=<0
+ALERT 1,"VOX not installed!",1," OK ",button&
+EDIT
+ENDIF
+'
+' Verifie si l'on peut utiliser cette version.
+vox_ver$=MKL$(LONG{vox_inf%+inf_version&})
+vox_ver$=LEFT$(vox_ver$,2)+"."+RIGHT$(vox_ver$,2)
+vox_comp$=MKL$(LONG{vox_inf%+inf_comp&})
+vox_comp$=LEFT$(vox_comp$,2)+"."+RIGHT$(vox_comp$,2)
+IF VAL(vox_comp$)>1.2
+ALERT 1,"I cannot handle|this version of VOX!",1," OK ",button&
+EDIT
+ENDIF
+vox_call_addr%=LONG{vox_inf%+inf_call_addr&} ! Adresse d'appel.
+'
+'
+' Pr‚pare l'‚cran.
+HIDEM
+@save_scr
+IF XBIOS(89)=2 ! Vgetmonitor().
+scr_mode&=0+8+16 ! B&W+VGA+80 columns.
+max_ln&=25 ! Nombre de lignes maximum pour le texte.
+ELSE
+scr_mode&=0+8+256 ! B&W+VGA+80 columns+interlace.
+max_ln&=25
+ENDIF
+@init_scr
+'
+'
+' D‚finition des variables.
+path$="" ! Chemin d'accŠs.
+mask$="*.*"
+default_name$=""
+'
+vox_pb%=MALLOC(pb_sizeof&)
+phoneme_txt_buf%=0
+freq%=25000
+voice_freq%=24000
+rate%=300
+tone%=200
+tone_lgt%=25
+vglobal%=16
+fc1=0
+fc2=0
+fc3=0
+vc1=0
+vc2=0
+vc3=0
+'
+' ParamŠtres globaux.
+speaker_fg!=FALSE
+repeat_fg!=FALSE
+play_fg!=FALSE
+quality%=8
+vox_error$="None"
+sentence$="Welcome to VOX"
+txt_converted!=FALSE
+vol&=8
+~@locksnd
+~@devconnect(0,8,0,0,1)
+~@devconnect(1,0,0,0,1)
+~@devconnect(2,0,0,0,1)
+~@devconnect(3,0,0,0,1)
+~@setmode(1)
+~@soundcmd(0,SHL&(vol&,0))
+~@soundcmd(1,SHL&(vol&,0))
+~@soundcmd(6,2) ! 25 KHz.
+@set_speaker
+@menu
+@speak
+@menu
+@play
+RETURN
+> PROCEDURE end
+sentence$="C U later"
+txt_converted!=FALSE
+@speak
+repeat_fg!=FALSE
+play_fg!=FALSE
+@play
+'
+~@unlocksnd
+@restore_scr
+~MFREE(phoneme_txt_buf%)
+~MFREE(spl_buf%)
+OUT 4,8
+SHOWM
+RESERVE
+EDIT
+RETURN
+'
+> PROCEDURE set_speaker
+IF speaker_fg!=TRUE
+~XBIOS(29,W:&HBF) ! Offgibit().
+ELSE
+~XBIOS(30,W:&H40) ! Ongibit().
+ENDIF
+RETURN
+> FUNCTION get_cookie(cookie$) ! Recherche d'un cookie.
+stack%=GEMDOS(32,L:0)
+cookie_jar%=LONG{&H5A0} ! Adresse du cookie jar.
+DO WHILE LONG{cookie_jar%}<>0 ! Si le nom n'est pas nul, ce n'est pas la fin du cookie jar.
+IF MKL$(LONG{cookie_jar%})=cookie$ ! Compare les noms.
+~GEMDOS(32,L:stack%)
+RETURN LONG{cookie_jar%+4} ! Renvoie le paramŠtre du cookie.
+ENDIF
+ADD cookie_jar%,8 ! Prochain cookie.
+LOOP
+~GEMDOS(32,L:stack%)
+RETURN -1
+ENDFUNC
+'
+' Audio subsystem.
+> FUNCTION locksnd
+RETURN XBIOS(128)
+ENDFUNC
+> FUNCTION unlocksnd
+RETURN XBIOS(129)
+ENDFUNC
+> FUNCTION soundcmd(mode%,data%)
+RETURN XBIOS(130,W:mode%,W:data%)
+ENDFUNC
+> FUNCTION setbuffer(mode%,begaddr%,endaddr%)
+RETURN XBIOS(131,W:mode%,L:begaddr%,L:endaddr%)
+ENDFUNC
+> FUNCTION setmode(mode%)
+RETURN XBIOS(132,W:mode%)
+ENDFUNC
+> FUNCTION settracks(playtrack%,rectracks%)
+RETURN XBIOS(133,W:playtracks%,W:rectracks%)
+ENDFUNC
+> FUNCTION setmontracks(track%)
+RETURN XBIOS(134,W:track%)
+ENDFUNC
+> FUNCTION setinterrupt(mode%,cause%)
+RETURN XBIOS(135,W:mode%,W:cause%)
+ENDFUNC
+> FUNCTION buffoper(mode%)
+RETURN XBIOS(136,W:mode%)
+ENDFUNC
+> FUNCTION gpio(mode%,data%)
+RETURN XBIOS(138,W:mode%,W:data%)
+ENDFUNC
+> FUNCTION devconnect(source%,dest%,clk%,prescale%,protocol%)
+RETURN XBIOS(139,W:source%,W:dest%,W:clk%,W:prescale%,W:protocol%)
+ENDFUNC
+> FUNCTION sndstatus(reset%)
+RETURN XBIOS(140,W:reset%)
+ENDFUNC
+> FUNCTION buffptr(pointer%)
+RETURN XBIOS(141,L:pointer%)
+ENDFUNC

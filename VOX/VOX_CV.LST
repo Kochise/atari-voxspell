@@ -1,0 +1,163 @@
+ON ERROR GOSUB end
+ON BREAK GOSUB end
+@struct
+src_name$="E:\ASSEMBLE\VOX\TABSTART.DAT"
+dst_name$="E:\ASSEMBLE\VOX\TABSTAR2.DAT"
+'
+' Charge d'abord le fichier.
+OPEN "i",#1,src_name$
+flgt%=LOF(#1)
+src_buf%=MALLOC(flgt%)
+BGET #1,src_buf%,flgt%
+CLOSE #1
+dst_buf%=MALLOC(74*struct_size&)
+'
+' Conversion des donn‚es des phonŠmes.
+FOR i&=0 TO 67
+  src_addr%=src_buf%+i&*old_struct_size&
+  dst_addr%=dst_buf%+i&*struct_size&
+  CARD{dst_addr%}=CARD{src_addr%+ascii&}
+  CARD{dst_addr%+2}=SHL&(BYTE{src_addr%+fgs&},8)
+  CARD{dst_addr%+4}=BYTE{src_addr%+priority&}
+  CARD{dst_addr%+6}=BYTE{src_addr%+lgt1&}
+  CARD{dst_addr%+8}=BYTE{src_addr%+lgt2&}
+  CARD{dst_addr%+10}=BYTE{src_addr%+freq_inf0&}
+  CARD{dst_addr%+12}=BYTE{src_addr%+freq_inf1&}
+  CARD{dst_addr%+14}=BYTE{src_addr%+freq_lgt0&}
+  CARD{dst_addr%+16}=BYTE{src_addr%+freq_lgt1&}
+  CARD{dst_addr%+18}=CARD{src_addr%+wfreq10&}
+  CARD{dst_addr%+20}=CARD{src_addr%+wfreq11&}
+  CARD{dst_addr%+22}=CARD{src_addr%+wfreq20&}
+  CARD{dst_addr%+24}=CARD{src_addr%+wfreq21&}
+  CARD{dst_addr%+26}=CARD{src_addr%+wfreq30&}
+  CARD{dst_addr%+28}=CARD{src_addr%+wfreq31&}
+  IF BYTE{src_addr%+noise_freq&}<>0
+    CARD{dst_addr%+30}=ROUND(250000/(BYTE{src_addr%+noise_freq&})/6.2)
+  ELSE
+    CARD{dst_addr%+30}=0
+  ENDIF
+  '  PRINT i&,CARD{dst_addr%+30}
+  '  ~INP(2)
+  CARD{dst_addr%+32}=BYTE{src_addr%+vol_inf&}
+  CARD{dst_addr%+34}=BYTE{src_addr%+vol_lgt0&}
+  CARD{dst_addr%+36}=BYTE{src_addr%+vol_lgt1&}
+  IF BYTE{src_addr%+noise_vol0&}<>0
+    SELECT MKI$(CARD{src_addr%+ascii&})
+    CASE "S "
+      PRINT "ok"
+      CARD{dst_addr%+38}=SHL&(BYTE{src_addr%+wvol10&},8)/25
+      CARD{dst_addr%+40}=SHL&(BYTE{src_addr%+wvol11&},8)/25
+      CARD{dst_addr%+42}=SHL&(BYTE{src_addr%+wvol20&},8)/25
+      CARD{dst_addr%+44}=SHL&(BYTE{src_addr%+wvol21&},8)/25
+      CARD{dst_addr%+46}=SHL&(BYTE{src_addr%+wvol30&},8)/25
+      CARD{dst_addr%+48}=SHL&(BYTE{src_addr%+wvol31&},8)/25
+      CARD{dst_addr%+50}=SHL&(BYTE{src_addr%+noise_vol0&},8)/15
+      CARD{dst_addr%+52}=SHL&(BYTE{src_addr%+noise_vol1&},8)/15
+    CASE "/H"
+      PRINT "ok"
+      CARD{dst_addr%+38}=SHL&(BYTE{src_addr%+wvol10&},8)/25
+      CARD{dst_addr%+40}=SHL&(BYTE{src_addr%+wvol11&},8)/25
+      CARD{dst_addr%+42}=SHL&(BYTE{src_addr%+wvol20&},8)/25
+      CARD{dst_addr%+44}=SHL&(BYTE{src_addr%+wvol21&},8)/25
+      CARD{dst_addr%+46}=SHL&(BYTE{src_addr%+wvol30&},8)/25
+      CARD{dst_addr%+48}=SHL&(BYTE{src_addr%+wvol31&},8)/25
+      CARD{dst_addr%+50}=SHL&(BYTE{src_addr%+noise_vol0&},8)/20
+      CARD{dst_addr%+52}=SHL&(BYTE{src_addr%+noise_vol1&},8)/20
+    DEFAULT
+      CARD{dst_addr%+38}=SHL&(BYTE{src_addr%+wvol10&},8)/5
+      CARD{dst_addr%+40}=SHL&(BYTE{src_addr%+wvol11&},8)/5
+      CARD{dst_addr%+42}=SHL&(BYTE{src_addr%+wvol20&},8)/5
+      CARD{dst_addr%+44}=SHL&(BYTE{src_addr%+wvol21&},8)/5
+      CARD{dst_addr%+46}=SHL&(BYTE{src_addr%+wvol30&},8)/5
+      CARD{dst_addr%+48}=SHL&(BYTE{src_addr%+wvol31&},8)/5
+      CARD{dst_addr%+50}=SHL&(BYTE{src_addr%+noise_vol0&},8)/15
+      CARD{dst_addr%+52}=SHL&(BYTE{src_addr%+noise_vol1&},8)/15
+    ENDSELECT
+  ELSE
+    CARD{dst_addr%+38}=SHL&(BYTE{src_addr%+wvol10&},8)/2
+    CARD{dst_addr%+40}=SHL&(BYTE{src_addr%+wvol11&},8)/2
+    CARD{dst_addr%+42}=SHL&(BYTE{src_addr%+wvol20&},8)/2.5
+    CARD{dst_addr%+44}=SHL&(BYTE{src_addr%+wvol21&},8)/2
+    CARD{dst_addr%+46}=SHL&(BYTE{src_addr%+wvol30&},8)/3
+    CARD{dst_addr%+48}=SHL&(BYTE{src_addr%+wvol31&},8)/2.5
+    CARD{dst_addr%+50}=0
+    CARD{dst_addr%+52}=0
+  ENDIF
+NEXT i&
+'
+' PhonŠmes doubles.
+FOR i&=68 TO 73
+  src_addr%=src_buf%+i&*old_struct_size&
+  dst_addr%=dst_buf%+i&*struct_size&
+  CARD{dst_addr%}=CARD{src_addr%+ascii&}
+  CARD{dst_addr%+2}=struct_size&*CARD{src_addr%+2}/old_struct_size&
+  CARD{dst_addr%+4}=struct_size&*CARD{src_addr%+4}/old_struct_size&
+  CARD{dst_addr%+6}=0
+  CARD{dst_addr%+8}=0
+  CARD{dst_addr%+10}=0
+  CARD{dst_addr%+12}=0
+  CARD{dst_addr%+14}=0
+  CARD{dst_addr%+16}=0
+  CARD{dst_addr%+18}=0
+  CARD{dst_addr%+20}=0
+  CARD{dst_addr%+22}=0
+  CARD{dst_addr%+24}=0
+  CARD{dst_addr%+26}=0
+  CARD{dst_addr%+28}=0
+  CARD{dst_addr%+30}=0
+  CARD{dst_addr%+32}=0
+  CARD{dst_addr%+34}=0
+  CARD{dst_addr%+36}=0
+  CARD{dst_addr%+38}=0
+  CARD{dst_addr%+40}=0
+  CARD{dst_addr%+42}=0
+  CARD{dst_addr%+44}=0
+  CARD{dst_addr%+46}=0
+  CARD{dst_addr%+48}=0
+  CARD{dst_addr%+50}=0
+  CARD{dst_addr%+52}=0
+NEXT i&
+'
+' Sauve les donn‚es converties.
+OPEN "o",#1,dst_name$
+BPUT #1,dst_buf%,74*struct_size&
+CLOSE #1
+'
+@end
+'
+> PROCEDURE struct
+  ascii&=0
+  lgt1&=2
+  lgt2&=3
+  wfreq10&=4
+  wfreq11&=6
+  wfreq20&=8
+  wfreq21&=10
+  wfreq30&=12
+  wfreq31&=14
+  priority&=16
+  freq_inf0&=17
+  freq_inf1&=18
+  freq_lgt0&=19
+  freq_lgt1&=20
+  wvol10&=21
+  wvol11&=22
+  wvol20&=23
+  wvol21&=24
+  wvol30&=25
+  wvol31&=26
+  noise_vol0&=27
+  noise_vol1&=28
+  vol_inf&=29
+  vol_lgt0&=30
+  vol_lgt1&=31
+  fgs&=32
+  noise_freq&=33
+  '
+  old_struct_size&=34
+  struct_size&=54
+RETURN
+> PROCEDURE end
+  ~MFREE(fbuf%)
+  EDIT
+RETURN

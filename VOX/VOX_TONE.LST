@@ -1,0 +1,48 @@
+ON BREAK GOSUB end
+ON ERROR GOSUB end
+'
+o=0.15
+n1=0.3
+n2=1-n1
+c1=(1-o)/n1
+c2=-(1-o)/n2
+'
+CLS
+LINE 0,400,639,400
+LINE 0,200,639,200
+DRAW 0,400-o*200
+FOR i&=0 TO 639
+  DRAW  TO i&,400-@f1(i&/640)*200
+NEXT i&
+' FOR i&=0 TO n2*640
+' DRAW  TO i&+n1*640,400-@f2(i&/640)*200
+' NEXT i&
+'
+~INP(2)
+'
+buf%=MALLOC(1024*4)
+FOR i&=0 TO 1023
+  n=@f1(i&/1024)
+  addr%=buf%+i&*4
+  LONG{addr%}=n*65536
+  PRINT i&,n,HEX$(LONG{addr%},8)
+  ' ~INP(2)
+NEXT i&
+' FOR i&=0 TO 1024*n2-1
+' n=@f2(i&/1024)
+' addr%=buf%+(INT(1024*n1)+i&)*4
+' LONG{addr%}=n*65536
+'  PRINT INT(1024*n1)+i&,n,HEX$(LONG{addr%},8)
+'  ~INP(2)
+' NEXT i&
+' LONG{buf%+1023*4}=0
+'
+BSAVE "E:\ASSEMBLE\VOX\TONE.DAT",buf%,1024*4
+@end
+'
+> PROCEDURE end
+  ~MFREE(buf%)
+  EDIT
+RETURN
+DEFFN f1(x)=1-x^9
+DEFFN f2(x)=o+c1*n1+c2*x
